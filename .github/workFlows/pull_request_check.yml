@@ -1,51 +1,54 @@
-﻿name: PR Build Check
+﻿name: Dotnet Build & Discord Notify
 
 on:
   pull_request:
     branches:
       - main
+      - develop
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - name: 📥 Check out repository
+        uses: actions/checkout@v4
 
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v3
+      - name: 🛠 Set up .NET
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: '8.0.x'
 
-      - name: Restore dependencies
+      - name: 📦 Restore dependencies
         run: dotnet restore
 
-      - name: Build project
-        run: dotnet build --no-restore
+      - name: 🏗 Build project
+        id: build_step
+        run: |
+          if dotnet build --no-restore --configuration Release; then
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            exit 1
+          fi
 
-      # Skicka meddelande om build lyckades
-      - name: Notify Discord - Success
-        if: success()
-        uses: sarisia/actions-status-discord@v1
-        with:
-          webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          status: success
-          title: "✅ PR Build Passed"
-          description: |
-            PR #${{ github.event.pull_request.number }} by ${{ github.actor }}
-            Build succeeded 🎉
-          color: 0x00ff00
+      - name: 📢 Notify Discord
+        if: always() # Kör oavsett om build lyckas eller misslyckas
+        run: |
+          STATUS="${{ steps.build_step.outputs.status }}"
+          if [ "$STATUS" = "success" ]; then
+            COLOR=3066993
+            MESSAGE="✅ Build passed for PR #${{ github.event.pull_request.number }} by ${{ github.actor }}"
+          else
+            COLOR=15158332
+            MESSAGE="❌ Build failed for PR #${{ github.event.pull_request.number }} by ${{ github.actor }}"
+          fi
 
-      # Skicka meddelande om bygget misslyckades
-      - name: Notify Discord - Failure
-        if: failure()
-        uses: sarisia/actions-status-discord@v1
-        with:
-          webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          status: failure
-          title: "❌ PR Build Failed"
-          description: |
-            PR #${{ github.event.pull_request.number }} by ${{ github.actor }}
-            Build failed 💥
-          color: 0xff0000
+          PAYLOAD=$(jq -n \
+            --arg content "$MESSAGE" \
+            '{content: $content}')
+
+          curl -H "Content-Type: application/json" \
+               -X POST \
+               -d "$PAYLOAD" \
+               "${{ secrets.DISCORD_WEBHOOK }}"
