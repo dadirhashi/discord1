@@ -1,4 +1,4 @@
-name: PR Build Check
+﻿name: PR Build Check
 
 on:
   pull_request:
@@ -10,16 +10,42 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Setup .NET SDK
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: '9.0.x' # �ndra till din version om du anv�nder t.ex. 7.0 eller 6.0
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '9.0.x'
 
-    - name: Restore dependencies
-      run: dotnet restore
+      - name: Restore dependencies
+        run: dotnet restore
 
-    - name: Build solution
-      run: dotnet build --no-restore
+      - name: Build project
+        run: dotnet build --no-restore
+
+      # Skicka meddelande om build lyckades
+      - name: Notify Discord - Success
+        if: success()
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: success
+          title: "✅ PR Build Passed"
+          description: |
+            PR #${{ github.event.pull_request.number }} by ${{ github.actor }}
+            Build succeeded 🎉
+          color: 0x00ff00
+
+      # Skicka meddelande om bygget misslyckades
+      - name: Notify Discord - Failure
+        if: failure()
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: failure
+          title: "❌ PR Build Failed"
+          description: |
+            PR #${{ github.event.pull_request.number }} by ${{ github.actor }}
+            Build failed 💥
+          color: 0xff0000
